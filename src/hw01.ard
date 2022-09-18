@@ -17,16 +17,25 @@
 
    second' = flip (second 0)
 -}
+\func second (_ y _ : Nat) : Nat => y
+
+\func apply (f : Nat -> Nat) (x : Nat) : Nat => f x
+
+\func compose (f g : Nat -> Nat) (x : Nat) : Nat => f (g x)
+
+\func flip (f : Nat -> Nat -> Nat) (x y : Nat) : Nat => f y x
+
+\func second' : Nat -> Nat -> Nat => flip (second 0)
 
 -- 3. Расставьте приоритеты функций f1, f2, f3, f4, f5 и f6 так, чтобы функция test проходила тайпчекинг.
 
 \import lect01 \hiding (+,*)
 
-\func f1 (x y : Nat) => x
+\func \fixr 10 f1 (x y : Nat) => x
 \func f2 : Nat => 0
-\func f3 (f : Nat -> Nat) (z : Nat) : Int => 0
+\func \infixl 9 f3 (f : Nat -> Nat) (z : Nat) : Int => 0
 \func f4 : Nat => 0
-\func f5 => f1
+\func \infixr 10 f5 => f1
 \func f6 => f4
 
 \func test => f1 f2 f3 f4 f5 f6
@@ -38,20 +47,91 @@
    if False _ e = e
 -}
 
+\func if (c t e : Bool) : Bool \elim c
+  | true => t
+  | false => e
+
 -- 5. Определите || через if.
 
-\func \infixr 2 || (x y : Bool) : Bool => {?}
+\func \infixr 2 || (x y : Bool) : Bool => if x true y
 
 -- 6. Определите возведение в степень и факториал для натуральных чисел.
 
 \open Nat \hiding (-,div) -- Здесь лежат + и *.
 
-\func \infixr 8 ^ (x y : Nat) => {?}
+\func \infixr 8 ^ (x y : Nat) : Nat \elim y
+  | 0 => 1
+  | suc y' => x ^ y' * x
 
-\func fac (x : Nat) => {?}
+\func fac (x : Nat) : Nat
+  | 0 => 1
+  | suc x' \as x => x * fac x'
 
 -- 7. Определите mod и gcd.
 
-\func mod (x y : Nat) => {?}
+\func mod (x y : Nat) : Nat => mod' x x y
+  \where
+    \func mod' (s x y : Nat) : Nat \elim s
+      | 0 => 0
+      | suc s => \case x < y \with {
+        | true => x
+        | false => mod' s (x - y) y
+      }
 
-\func gcd (x y : Nat) => {?}
+\func gcd (x y : Nat) => gcd' (x + y) x y
+  \where
+    \func gcd' (s x y : Nat) : Nat \elim s
+      | 0 => 0
+      | suc s => \case y \with {
+        | 0 => x
+        | suc _ \as y => gcd' s y (mod x y)
+      }
+
+-- Tests
+
+\func secondTest1 : second 1 2 3 = 2 => idp
+\func secondTest2 : second 0 0 0 = 0 => idp
+
+\func applyTest1 : apply (\lam (x : Nat) => x) 5 = 5 => idp
+\func applyTest2 : apply (\lam (x : Nat) => 2 * x) 5 = 10 => idp
+
+\func composeTest1 : compose (\lam (x : Nat) => 2 * x) (\lam (x : Nat) => x + 5) 10 = 30 => idp
+\func composeTest2 : compose (\lam (x : Nat) => x + 5) (\lam (x : Nat) => 2 * x) 10 = 25 => idp
+
+\func flipTest1 : flip (\lam (x y : Nat) => x - y) 3 10 = 7 => idp
+\func flipTest2 : flip (\lam (x y : Nat) => x - y) 10 3 = 0 => idp
+
+\func second'Test1 : second' 2 3 = 3 => idp
+\func second'Test2 : second' 3 2 = 2 => idp
+
+\func ifTest1 : if false true false = false => idp
+\func ifTest2 : if false false true = true => idp
+\func ifTest3 : if true true false = true => idp
+\func ifTest4 : if true false true = false => idp
+
+\func ||Test1 : false || false = false => idp
+\func ||Test2 : false || true = true => idp
+\func ||Test3 : true || false = true => idp
+\func ||Test4 : true || true = true => idp
+
+\func ^Test1 : 2 ^ 0 = 1 => idp
+\func ^Test2 : 2 ^ 3 = 8 => idp
+\func ^Test3 : 10 ^ 3 = 1000 => idp
+
+\func facTest1 : fac 0 = 1 => idp
+\func facTest2 : fac 1 = 1 => idp
+\func facTest3 : fac 2 = 2 => idp
+\func facTest4 : fac 3 = 6 => idp
+\func facTest5 : fac 4 = 24 => idp
+\func facTest6 : fac 5 = 120 => idp
+
+\func modTest1 : mod 5 2 = 1 => idp
+\func modTest2 : mod 4 2 = 0 => idp
+\func modTest3 : mod 2 4 = 2 => idp
+\func modTest4 : mod 0 4 = 0 => idp
+\func modTest5 : mod 123 100 = 23 => idp
+
+\func gcdTest1 : gcd 5 10 = 5 => idp
+\func gcdTest2 : gcd 10 5 = 5 => idp
+\func gcdTest3 : gcd 123 123 = 123 => idp
+\func gcdTest4 : gcd 12 17 = 1 => idp
