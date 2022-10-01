@@ -1,13 +1,23 @@
+\import Algebra.Meta
+\import Function.Meta
+\import Paths.Meta
 \import Utils
+\import lect03
 \open Nat(+,*)
 
 -- 1. Чему равно fileTest (в нормальной форме)? Докажите это.
 
+\func fileTestNfProof : fileTest = (foobar, 8, 13, 55, 18, 21) => idp
+
 -- 2. Чему равно M5.t''' (в нормальной форме)? Докажите это.
+
+\func M5t'''NfProof : M5.t''' = ((82, 42, 61, 82, 34, 42, 61, 29), 25, (42, 29)) => idp
 
 -- 3. Докажите ассоциативность ++.
 
-\func ++-assoc {A : \Type} (xs ys zs : List A) : (xs ++ ys) ++ zs = xs ++ (ys ++ zs) => {?}
+\func ++-assoc {A : \Type} (xs ys zs : List A) : (xs ++ ys) ++ zs = xs ++ (ys ++ zs) \elim xs
+  | nil => idp
+  | :: x xs => pmap (x ::) (++-assoc xs ys zs)
 
 -- 4. Докажите, что reverse (reverse xs) = xs, где reverse определен через ++.
 
@@ -15,29 +25,91 @@
   | nil => nil
   | :: x xs => reverse xs ++ x :: nil
 
--- Это утверждение будет полезно для доказательства.
-\func reverse++ {A : \Type} (xs ys : List A) : reverse (xs ++ ys) = reverse ys ++ reverse xs => {?}
+\func ++nil-comm {A : \Type} (xs : List A) : xs ++ nil = xs \elim xs
+  | nil => idp
+  | :: x xs => pmap (x ::) (++nil-comm xs)
 
-\func reverse-isInvolutive {A : \Type} (xs : List A) : reverse (reverse xs) = xs => {?}
+-- Это утверждение будет полезно для доказательства.
+\func reverse++ {A : \Type} (xs ys : List A) : reverse (xs ++ ys) = reverse ys ++ reverse xs
+  | nil, nil => idp
+  | nil, :: _ _ \as ys => sym $ ++nil-comm (reverse ys)
+  | :: _ _ \as xs, nil => pmap reverse (++nil-comm xs)
+  | :: x' xs' \as xs, :: y' ys' \as ys =>
+    \let p : reverse (xs' ++ ys) = reverse ys ++ reverse xs' => reverse++ xs' ys
+    \in
+    equation
+      (reverse (xs' ++ ys) ++ (x' :: nil))         {pmap (`++ (x' :: nil)) p}
+      ((reverse ys ++ reverse xs') ++ (x' :: nil)) {++-assoc (reverse ys) (reverse xs') (x' :: nil)}
+      (reverse ys ++ reverse xs' ++ (x' :: nil))
+
+\func reverse-isInvolutive {A : \Type} (xs : List A) : reverse (reverse xs) = xs \elim xs
+  | nil => idp
+  | :: x' xs' \as xs =>
+    \let | p : reverse (reverse xs' ++ x' :: nil) = x' :: reverse (reverse xs') => reverse++ (reverse xs') (x' :: nil)
+         | q : x' :: reverse (reverse xs') = xs => pmap (x' ::) (reverse-isInvolutive xs')
+    \in p *> q
 
 -- 5. Докажите дистрибутивность умножения над сложением для натуральных чисел.
 
-\func rdistr (n m k : Nat) : (m + k) * n = m * n + k * n => {?}
+\func rdistr (n m k : Nat) : (m + k) * n = m * n + k * n \elim n
+  | 0 => idp
+  | suc n =>
+    \let | p : (m + k) * suc n = (m + k) * n + (m + k) => idp
+         | q : (m + k) * n = m * n + k * n => rdistr n m k
+    \in equation
+        ((m + k) * suc n) {rewriteI q p}
+        (m * n + k * n + (m + k)) {reordering (m * n) (k * n) m k}
+        (m * suc n + k * suc n)
+    \where \func reordering (a b c d : Nat) : a + b + (c + d) = (a + c) + (b + d) =>
+      equation
+        (a + b + (c + d))   {+-assoc a b (c + d)}
+        (a + (b + (c + d))) {pmap (a +) (+-comm b (c + d))}
+        (a + ((c + d) + b)) {sym $ +-assoc a (c + d) b}
+        (a + (c + d) + b)   {pmap (`+ b) $ sym (+-assoc a c d)}
+        (((a + c) + d) + b) {+-assoc (a + c) d b}
+        ((a + c) + (d + b)) {pmap (a + c +) (+-comm d b)}
+        ((a + c) + (b + d))
 
-\func ldistr (n m k : Nat) : n * (m + k) = n * m + n * k => {?}
+\func *-comm {x y : Nat} : x * y = y * x \elim x
+  | 0 => multByZero
+  | suc x =>
+    equation
+        (suc x * y)     {rdistr y 1 x}
+        (1 * y + x * y) {pmap (`+ x * y) multByOne}
+        (y + x * y)     {+-comm y (x * y)}
+        (x * y + y)     {pmap (`+ y) *-comm}
+        (y * suc x)
+  \where {
+    \func multByZero {x : Nat} : 0 * x = 0 \elim x
+      | 0 => idp
+      | suc x => multByZero
+
+    \func multByOne {x : Nat} : 1 * x = x \elim x
+      | 0 => idp
+      | suc x => pmap suc multByOne
+  }
+
+\func ldistr (n m k : Nat) : n * (m + k) = n * m + n * k =>
+  equation
+    (n * (m + k))   {*-comm}
+    ((m + k) * n)   {rdistr n m k}
+    (m * n + k * n) {pmap (`+ k * n) *-comm}
+    (n * m + k * n) {pmap (n * m +) *-comm}
+    (n * m + n * k)
 
 -- 6. Определите конгруэнтность для функций двух аргументов через transport.
 --    Можно использовать любые функции, определенные через transport.
 
-\func pmap2 {A B C : \Type} (f : A -> B -> C) {a a' : A} (p : a = a') {b b' : B} (q : b = b') : f a b = f a' b' => {?}
+\func pmap2 {A B C : \Type} (f : A -> B -> C) {a a' : A} (p : a = a') {b b' : B} (q : b = b') : f a b = f a' b' =>
+  transport (\lam x => f a b = f x b') p (transport (\lam x => f a b = f a x) q idp)
 
 -- 7. Докажите, что transport выражается через pmap и repl и наоборот.
 
 -- repl говорит, что если у нас есть два равных типа, то у нас есть функция из одного во второй.
 -- Определите repl через transport.
 
-\func repl {A B : \Type} (p : A = B) (a : A) : B => {?}
+\func repl {A B : \Type} (p : A = B) (a : A) : B => transport (\lam t => t) p a
 
 -- Определите transport через repl и pmap.
 
-\func transport' {A : \Type} (B : A -> \Type) {a a' : A} (p : a = a') (b : B a) : B a' => {?}
+\func transport' {A : \Type} (B : A -> \Type) {a a' : A} (p : a = a') (b : B a) : B a' => repl (pmap B p) b
