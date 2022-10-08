@@ -12,35 +12,88 @@
   | suc x, 0 => false
   | suc x, suc y => x < y
 
-\func lookup => {?}
+\func lookup {A : \Type} (xs : List A) (n : Nat) (p : T (n < length xs)) : A \elim xs, n
+  | nil, 0 => absurd p
+  | nil, suc n => absurd p
+  | :: x xs, 0 => x
+  | :: x xs', suc n' => lookup xs' n' p
 
 -- 2. Реализуйте аналоги функции replicate для vec и Vec (эта функция создает список заданной длины, состоящий из повторений данного элемента).
 
+\func replicate-Vec {A : \Type} (x : A) (n : Nat) : Vec A n \elim n
+  | 0 => vnil
+  | suc n => vcons x (replicate-Vec x n)
+
+\func replicate-vec {A : \Type} (x : A) (n : Nat) : vec A n \elim n
+  | 0 => ()
+  | suc n => (x, replicate-vec x n)
+
 -- 3. Реализуйте аналоги функции map для vec и Vec.
+
+\func map-Vec {A B : \Type} {n : Nat} (xs : Vec A n) (f : A -> B) : Vec B n \elim n, xs
+  | 0, vnil => vnil
+  | suc n, vcons x xs => vcons (f x) (map-Vec xs f)
+
+\func map-vec {A B : \Type} {n : Nat} (xs : vec A n) (f : A -> B) : vec B n \elim n, xs
+  | 0, xs => ()
+  | suc n, (x, xs) => (f x, map-vec xs f)
 
 -- 4. Реализуйте аналоги функции zipWith для vec и Vec.
 --    Функция должна принимать вектора одинаковой длины.
 
+\func zipWith-Vec {A B C : \Type} {n : Nat} (f : A -> B -> C) (xs : Vec A n) (ys : Vec B n) : Vec C n \elim n, xs, ys
+  | 0, vnil, vnil => vnil
+  | suc n, vcons x xs, vcons y ys => vcons (f x y) (zipWith-Vec f xs ys)
+
+\func zipWith-vec {A B C : \Type} {n : Nat} (f : A -> B -> C) (xs : vec A n) (ys : vec B n) : vec C n \elim n, xs, ys
+  | 0, xs, ys => ()
+  | suc n, (x, xs), (y, ys) => (f x y, zipWith-vec f xs ys)
+
 -- 5. Определите тип CTree A n полных бинарных деревьев высоты ровно n, которые хранят элементы только во внутренних узлах, но не в листьях.
 --    Высота листа равна 0.
 
-\data CTree (A : \Type) (n : Nat)
+\data CTree (A : \Type) (n : Nat) \elim n
+  | 0 => cLeaf
+  | suc n => cNode A (CTree A n) (CTree A n)
 
 -- 6. Определите тип Tree A n бинарных деревьев высоты не больше n, которые хранят элементы только во внутренних узлах, но не в листьях.
 --    Высота листа равна 0.
 
-\data Tree (A : \Type) (n : Nat)
+\data Tree (A : \Type) (n : Nat) \elim n
+  | 0 => leaf
+  | suc n => {
+    | lNode A (Tree A n) -- node with only left child
+    | rNode A (Tree A n) -- node with only right child
+    | node A (Tree A n) (Tree A n) -- node with two children
+  }
 
 -- определите функцию, возвращающую высоту дерева.
 
-\func height {A : \Type} (n : Nat) (t : Tree A n) : Fin (suc n) => {?}
+\func height {A : \Type} (n : Nat) (t : Tree A n) : Fin (suc n)
+  | 0, leaf => fzero
+  | suc n, lNode x l => fsuc (height n l)
+  | suc n, rNode x r => fsuc (height n r)
+  | suc n, node x l r =>
+    \let | hl => height n l
+         | hr => height n r
+    \in \case hl less hr \with {
+      | true => fsuc hr
+      | false => fsuc hl
+    }
+    \where \func \infix 4 less {n : Nat} (x : Fin n) (y : Fin n) : Bool \elim n, x, y
+      | suc n, fzero, fzero => false
+      | suc n, fzero, fsuc y => true
+      | suc n, fsuc x, fzero => false
+      | suc n, fsuc x, fsuc y => x less y
 
 -- Optional task
 -- 7. Функции Fin n -> A соответствуют спискам элементов A длины n.
 --     Функция, преобразующая Vec A n в Fin n -> A, была реализована на лекции.
 --     Реализуйте обратную функцию.
 
-\func coin {A : \Type} {n : Nat} (f : Fin n -> A) : Vec A n => {?}
+\func coin {A : \Type} {n : Nat} (f : Fin n -> A) : Vec A n \elim n
+  | 0 => vnil
+  | suc n => vcons (f fzero) (coin (\lam x => f (fsuc x)))
 
 -- Optional task
 -- 8. Определите тип матриц и ряд функций над ними.
@@ -66,7 +119,13 @@
 
 -- 9. Определите факториал через Nat-rec.
 
+\func fact (n : Nat) : Nat =>
+  Nat-rec Nat 1 (\lam n factN => suc n * factN) n
+
 -- 10. Докажите ассоциативность сложения для натуральных чисел через Nat-elim.
+
+\func +'-assoc {x y z : Nat} : (x + y) + z = x + (y + z) =>
+  Nat-elim (\lam z => (x + y) + z = x + (y + z)) idp (\lam _ p => pmap suc p) z
 
 -- 11. Определите рекурсор и элиминатор для D.
 
@@ -75,6 +134,24 @@
   | con2 D D
   | con3 (Nat -> D)
 
+\func D-rec (P : \Type)
+            (c1 : Nat -> P)
+            (c2 : D -> D -> P -> P -> P)
+            (c3 : (Nat -> D) -> (Nat -> P) -> P)
+            (x : D) : P \elim x
+  | con1 n => c1 n
+  | con2 d1 d2 => c2 d1 d2 (D-rec P c1 c2 c3 d1) (D-rec P c1 c2 c3 d2)
+  | con3 f => c3 f (\lam n => D-rec P c1 c2 c3 (f n))
+
+\func D-elim (P : D -> \Type)
+             (c1 : \Pi (n : Nat) -> P (con1 n))
+             (c2 : \Pi (d1 d2 : D) -> P d1 -> P d2 -> P (con2 d1 d2))
+             (c3 : \Pi (f : Nat -> D) -> (\Pi (n : Nat) -> P (f n)) -> P (con3 f))
+             (x : D) : P x \elim x
+  | con1 n => c1 n
+  | con2 d1 d2 => c2 d1 d2 (D-elim P c1 c2 c3 d1) (D-elim P c1 c2 c3 d2)
+  | con3 f => c3 f (\lam n => D-elim P c1 c2 c3 (f n))
+
 {- To check that the definition of D-elim and D-rec is correct, you can try to implement foo using D-rec.
 \func foo (d : D) : Nat
   | con1 n => n
@@ -82,15 +159,41 @@
   | con3 g => foo (g (foo (g 100)))
 -}
 
+\func foo (d : D) : Nat
+  => D-rec
+      Nat
+      (\lam n => n)
+      (\lam _ _ p1 p2 => p1 Nat.+ p2)
+      (\lam g h => h (h 100))
+      d
+
 -- 12. Определите рекурсор и элиминатор для List.
+
+\func List-elim {A : \Type}
+  (B : List A -> \Type)
+  (n : B nil)
+  (c : \Pi (x : A) (xs : List A) -> B xs -> B (:: x xs))
+  (xs : List A) : B xs \elim xs
+  | nil => n
+  | :: x xs => c x xs (List-elim B n c xs)
+
+\func List-rec {A : \Type}
+  (B : \Type)
+  (n : B)
+  (c : A -> List A -> B -> B)
+  (xs : List A) : B \elim xs
+  | nil => n
+  | :: x xs => c x xs (List-rec B n c xs)
 
 -- 13. Докажите pmap при помощи паттерн матчинга с idp.
 
-\func pmap {A B : \Type} (f : A -> B) {a a' : A} (p : a = a') : f a = f a' => {?}
+\func pmap {A B : \Type} (f : A -> B) {a a' : A} (p : a = a') : f a = f a' \elim p
+  | idp => idp
 
 -- 14. Докажите pmap2 при помощи паттерн матчинга с idp.
 
-\func pmap2 {A B C : \Type} (f : A -> B -> C) {a a' : A} (p : a = a') {b b' : B} (q : b = b') : f a b = f a' b' => {?}
+\func pmap2 {A B C : \Type} (f : A -> B -> C) {a a' : A} (p : a = a') {b b' : B} (q : b = b') : f a b = f a' b' \elim p, q
+  | idp, idp => idp
 
 -- Optional task
 -- 15. У оператора J есть другая форма, которую мы будем называть Jalt. Докажите, что J и Jalt эквивалентны, то есть выразите одно через другое и наоборот.
