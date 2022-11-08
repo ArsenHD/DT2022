@@ -1,6 +1,15 @@
 \import Data.Bool
 \import Data.List \hiding (headDef)
-\import Utils (<->)
+\import Data.Or
+\import Function.Meta
+\import Logic (Empty, absurd)
+\import Logic.Meta
+\import Meta
+\import Paths (*>)
+\import Paths.Meta
+\import Utils (<->, Not, pmap, sym)
+\import hw05
+\import lect05 (funExt')
 \import lect08
 \import Order.LinearOrder
 \open LinearOrder
@@ -10,7 +19,162 @@
 --    * Все элементы filter p xs удовлетворяют предикату p
 --    * Любой подсписок xs с тем же свойством является подсписком filter p xs
 
+\func filter {A : \Type} (p : A -> Bool) (xs : List A) : List A \elim xs
+  | nil => nil
+  | :: x xs => \case p x \with {
+    | false => filter p xs
+    | true => x :: filter p xs
+  }
+
+\data Sublist {A : \Type} (xs ys : List A) \with
+  | nil, _ => nil-sub
+  | :: x xs \as l, :: y ys => {
+    | head-sub (x = y) (Sublist xs ys)
+    | tail-sub (Sublist l ys)
+  }
+
+\func filter-is-sublist {A : \Type} (p : A -> Bool) (xs : List A) : Sublist (filter p xs) xs \elim xs
+  | nil => nil-sub
+  | :: x xs => cases (p x) \with {
+    | true => head-sub idp (filter-is-sublist p xs)
+    | false => lemma (filter p xs) xs x (filter-is-sublist p xs)
+  }
+  \where {
+    \func lemma {A : \Type} (xs : List A) (ys : List A) (y : A) (p : Sublist xs ys) : Sublist xs (y :: ys) \elim xs, ys, p
+      | nil, ys, nil-sub => nil-sub
+      | :: x xs, :: y ys, p => tail-sub p
+  }
+
+\data AllElementsSatisfy {A : \Type} (p : A -> Bool) (xs : List A) \elim xs
+  | nil => nil-sat
+  | :: x xs => cons-sat (p x = true) (AllElementsSatisfy p xs)
+
+\func all-elements-satisfy {A : \Type} (p : A -> Bool) (xs : List A) : AllElementsSatisfy p (filter p xs) \elim xs
+  | nil => nil-sat
+  | :: x xs => mcases {_}  {arg addPath} \with {
+    | false, q => all-elements-satisfy p xs
+    | true, q => cons-sat q (all-elements-satisfy p xs)
+  }
+
+\func all-sat-sublist-is-sublist-of-filter {A : \Type}
+                                           (p : A -> Bool)
+                                           (ys : List A)
+                                           (xs : List A)
+                                           (ys_is_sublist_of_xs : Sublist ys xs)
+                                           (q : AllElementsSatisfy p ys)
+  : Sublist ys (filter p xs) \elim ys, xs, ys_is_sublist_of_xs, q
+  | nil, xs, nil-sub, nil-sat => nil-sub
+  | :: y ys, :: x xs, head-sub y=x ys_is_sublist_of_xs, cons-sat p_y=true q
+    => mcases {_} {arg addPath} \with {
+      | false, p_x=false =>
+          \let x/=y : Not (x = y) => lemma2 p x y p_x=false p_y=true
+          \in contradiction
+      | true, p_x=true => head-sub y=x (all-sat-sublist-is-sublist-of-filter p ys xs ys_is_sublist_of_xs q)
+    }
+  | :: y ys, :: x xs, tail-sub ys_is_sublist_of_xs, cons-sat p_y=true q => mcases {_} {arg addPath} \with {
+    | false, p_x=false => all-sat-sublist-is-sublist-of-filter p (y :: ys) xs ys_is_sublist_of_xs (cons-sat p_y=true q)
+    | true, p_x=true =>
+      \let | ys-all-sat : AllElementsSatisfy p (y :: ys) => cons-sat p_y=true q
+      \in tail-sub (all-sat-sublist-is-sublist-of-filter p (y :: ys) xs ys_is_sublist_of_xs ys-all-sat)
+  }
+  \where {
+      \func lemma1 {A : \Type}
+                  (x y : A)
+                  (xs ys : List A)
+                  (sub : Sublist (x :: xs) (y :: ys))
+                  (x/=y : Not (x = y))
+        : Sublist (x :: xs) ys
+        \elim xs, ys
+          | nil, nil => cases sub contradiction
+          | nil, :: y' ys => cases sub \with {
+            | head-sub p sub' => contradiction
+            | tail-sub sub' => sub'
+          }
+          | :: x' xs, nil => cases sub contradiction
+          | :: x' xs, :: y' ys => cases sub \with {
+            | head-sub p sub' => contradiction
+            | tail-sub sub' => sub'
+          }
+
+      \func lemma2 {A : \Type}
+                   (p : A -> Bool)
+                   (x y : A)
+                   (p_x=false : p x = false)
+                   (p_y=true : p y = true)
+        : Not (x = y)
+        => \lam x=y =>
+            \let p_y=false : p x = true => rewrite x=y p_y=true
+            \in contradiction
+  }
+
 -- 2. Докажите, что Perm l1 l2 тогда и только тогда, когда Insertion.sort l1 = Insertion.sort l2.
+
+\func perm<->sort {A : Dec} (xs ys : List A) : Perm xs ys <-> (Insertion.sort xs = Insertion.sort ys) =>
+  (lemma1, lemma2)
+  \where {
+    \open Insertion(sort, sort-perm)
+    \open Insertion.sort-perm(insert-comm, inserted-perm)
+    \open Insertion.sort(insert)
+
+    \func lemma1 {A : Dec} {xs ys : List A} (p : Perm xs ys) : sort xs = sort ys
+      \elim xs, ys, p
+        | nil, nil, perm-nil => idp
+        | :: x xs, :: y ys, perm-cons x=y perm_xs_ys =>
+          \let | rec : sort xs = sort ys => lemma1 perm_xs_ys
+               | aux : insert x (sort xs) = insert x (sort ys)
+                       => pmap (insert x) rec
+          \in rewrite (sym x=y) aux
+        | :: x (:: x' xs), :: y (:: y' ys), perm-swap x=y' x'=y xs=ys =>
+          \let aux : insert y' (insert y (sort ys)) = insert y (insert y' (sort ys)) => insert-comm y' y (sort ys)
+          \in rewrite x=y' (rewrite x'=y (rewrite xs=ys aux))
+        | xs, ys, perm-trans perm_xs_zs perm_zs_ys =>
+          \let | aux1 => lemma1 perm_xs_zs
+               | aux2 => lemma1 perm_zs_ys
+          \in aux1 *> aux2
+
+    \func lemma2 {A : Dec} {xs ys : List A} (p : sort xs = sort ys) : Perm xs ys \elim xs, ys
+      | nil, nil => perm-nil
+      | nil, :: y ys => absurd (lemma3 y (sort ys) (sym p))
+      | :: x xs, nil => absurd (lemma3 x (sort xs) p)
+      | :: x xs, :: y ys =>
+        \let | aux1 : Perm (x :: xs) (sort (x :: xs)) => sort-perm (x :: xs)
+             | aux2 : Perm (y :: ys) (sort (y :: ys)) => sort-perm (y :: ys)
+             | aux3 : Perm (y :: ys) (sort (x :: xs)) => rewrite p aux2
+             | aux4 : Perm (sort (x :: xs)) (y :: ys) => lemma6 aux3
+        \in perm-trans aux1 aux4
+
+    \func lemma3 {A : Dec} (x : A) (xs : List A) (p : insert x xs = nil) : Empty \elim xs
+      | nil => \case p
+      | :: x' xs' => cases (dec<_<= x' x arg addPath) \with {
+        | inl _, p' => \let aux => rewrite p' p \in contradiction
+        | inr _, p' => \let aux => rewrite p' p \in contradiction
+      }
+
+    \func headOrDefault {A : \Type} (xs : List A) (d : A) : A \elim xs
+      | nil => d
+      | :: x xs => x
+
+    \func lemma4 {A : \Type} (x y : A) (p : x :: nil = y :: nil) : x = y => pmap (headOrDefault __ x) p
+
+    \func lemma5 {A : Dec} {x y z : A} {xs ys : List A} (p : insert x nil = insert y (z :: ys)) : Empty \elim ys
+      | nil => cases (dec<_<= z y arg addPath) \with {
+        | inl _, p' => \let aux => rewrite p' p \in contradiction
+        | inr _, p' => \let aux => rewrite p' p \in contradiction
+      }
+      | :: y' ys' => cases (dec<_<= z y arg addPath) \with {
+        | inl _, p' => \let aux => rewrite p' p \in cases (dec<_<= y' y arg addPath) \with {
+          | inl _, p'' => \let aux' => rewrite p'' aux \in contradiction
+          | inr _, p'' => \let aux' => rewrite p'' aux \in contradiction
+        }
+        | inr _, p' => \let aux => rewrite p' p \in cases (dec<_<= y' y arg addPath) contradiction
+      }
+
+      \func lemma6 {A : Dec} {xs ys : List A} (p : Perm xs ys) : Perm ys xs \elim xs, ys, p
+        | nil, nil, perm-nil => perm-nil
+        | :: x xs, :: y ys, perm-cons p p' => perm-cons (sym p) (lemma6 p')
+        | :: x (:: x' xs), :: y (:: y' ys), perm-swap p p' p'' => perm-swap (sym p') (sym p) (sym p'')
+        | xs, ys, perm-trans p' p'' => perm-trans (lemma6 p'') (lemma6 p')
+  }
 
 -- 3. Докажите, что спецификация "результат является перестановкой входа и отсортирован" является полной для функции sort.
 
