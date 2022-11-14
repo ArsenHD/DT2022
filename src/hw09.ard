@@ -1,6 +1,12 @@
 \import Data.List
+\import Function.Meta
+\import Meta
 \import Order.LinearOrder
-\import Utils (Maybe, just, maybe, nothing)
+\import Paths
+\import Paths.Meta
+\import Utils (Maybe, just, maybe, nothing, sym)
+\import hw07
+\import lect05
 \import lect07(Decide)
 \import lect09
 \open LinearOrder
@@ -9,19 +15,42 @@
 
 \instance TermMonad : Monad Term
   | return => var
+
   | >>= {A B : \Set} (t : Term A) (k : A -> Term B) : Term B \elim t {
     | var v => k v
     | unit => unit
     | app t1 t2 => app (t1 >>= k) (t2 >>= k)
     | lam t => lam (t >>= liftM k)
   }
-  | return-left => {?}
-  | return-right => {?}
-  | >>=-assoc => {?}
+
+  | return-left _ _ => idp
+
+  | return-right {A : \Set} (t : Term A) : t >>= return = t \elim t {
+    | app t1 t2 =>
+      \let | aux1 : t1 >>= return = t1 => return-right t1
+           | aux2 : t2 >>= return = t2 => return-right t2
+      \in rewrite aux1 (rewrite aux2 idp)
+    | lam t =>
+      \let | aux1 : t >>= return = t => return-right t
+           | aux2 : liftM {A} return = return => funExt' (\lam x => cases x idp)
+      \in rewrite aux2 (rewrite aux1 idp)
+    | var v => idp
+    | unit => idp
+  }
+
+  | >>=-assoc {A B C : \Set}
+              (m : Term A) (k : A -> Term B) (l : B -> Term C)
+              : (m >>= k) >>= l = m >>= (\lam x => k x >>= l)
+    \elim m {
+      | app m1 m2 => rewrite (>>=-assoc m1 k l) (rewrite (>>=-assoc m2 k l) idp)
+      | lam m => pmap lam $ unfold liftM {?}
+      | var v => idp
+      | unit => idp
+    }
 
 -- 2. Определите отношение многошаговой редукции на Term.
 
-\func Red {V : \Set} (t s : Term V) : \Type => {?}
+\func Red {V : \Set} (t s : Term V) : \Type => ReflTransClosure Red1 t s
 
 -- 3. Стратегия редукции -- это функция, которая каждому терму сопоставляет либо некоторый терм, к которому он редуцируется за 1 шаг, либо доказательство, что таких термов нет.
 --    Определите любую стратегию редукции.
@@ -30,14 +59,14 @@
 
 -- 4. Докажите, что подтермы достижимого терма достижимы.
 
-\func appAccLeft {V : \Set} {t s : Term V} (a : Acc Red1 (app t s)) : Acc Red1 t
-  => {?}
+\func appAccLeft {V : \Set} {t s : Term V} (a : Acc Red1 (app t s)) : Acc Red1 t \elim a
+  | acc f => acc \lam t' red1_t_t' => appAccLeft (f (app t' s) (appLeft red1_t_t' idp))
 
-\func appAccRight {V : \Set} {t s : Term V} (a : Acc Red1 (app t s)) : Acc Red1 s
-  => {?}
+\func appAccRight {V : \Set} {t s : Term V} (a : Acc Red1 (app t s)) : Acc Red1 s \elim a
+  | acc f => acc \lam s' red1_s_s' => appAccRight (f (app t s') (appRight idp red1_s_s'))
 
-\func subLamAcc {V : \Set} {t : Term (Maybe V)} (a : Acc Red1 (lam t)) : Acc Red1 t
-  => {?}
+\func subLamAcc {V : \Set} {t : Term (Maybe V)} (a : Acc Red1 (lam t)) : Acc Red1 t \elim a
+  | acc f => acc \lam t' red_t_t' => subLamAcc (f (lam t') (redLam red_t_t'))
 
 -- 5. Докажите следующую обобщенную лемму о подстановке и выведите из нее обычную версию: если Г, x : A |- b : B и Г |- a : A, то Г |- b[a/x] : B.
 
